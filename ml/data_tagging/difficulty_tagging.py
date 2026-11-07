@@ -1,281 +1,279 @@
-import json
-import re
+"""Add difficulty tags (easy / medium / hard) to MelodyHub JSONL records.
+
+The tag is written as its own control line right after the task line of the
+record's input, for example::
+
+    %%generation
+    %%difficulty=easy
+
+It has to be its own ``%%`` line: MelodyT5's encoder (``Patchilizer.encode``)
+only keeps lines that start with ``%%`` or a header like ``K:`` as separate
+units, and silently drops other text that contains no bar lines.
+
+Difficulty is measured on the *output* melody only (the thing the model
+learns to produce), using its notes rather than its headers or titles:
+pitch range, leap size, accidentals, key signature, rhythmic variety, note
+density, ornaments and tempo. Each feature is standardised over a random
+sample of the data, combined with weights, and split into thirds.
+
+Usage (from the repository root)::
+
+    python ml/data_tagging/difficulty_tagging.py ml/data/melodyhub/train.jsonl ml/data/melodyhub/validation.jsonl
+
+This writes ``train_tagged.jsonl`` and ``validation_tagged.jsonl`` next to the
+inputs. Cut-offs are calibrated on the first file and reused for the rest, so
+every file is tagged on the same scale.
+"""
 import argparse
-import numpy as np
+import json
+import random
+import re
+import statistics
+from collections import Counter, defaultdict
+from pathlib import Path
+
+DIFFICULTIES = ("easy", "medium", "hard")
+
+# Tasks whose output is a melody. Cataloging outputs metadata, so it is left untagged.
+MELODY_TASKS = {"generation", "harmonization", "melodization", "segmentation", "transcription", "variation"}
+
+WEIGHTS = {
+    "pitch_range": 1.0,
+    "mean_leap": 1.0,
+    "accidentals": 1.0,
+    "key_accidentals": 0.5,
+    "rhythm_variety": 1.0,
+    "notes_per_bar": 1.0,
+    "ornaments": 0.5,
+    "tempo": 0.5,
+}
+
+TASK_LINE_RE = re.compile(r"^%%\s*([A-Za-z]+)\s*$")
+DIFFICULTY_LINE_RE = re.compile(r"^%%\s*difficulty\s*=.*$", re.I | re.M)
+OLD_TAG_RE = re.compile(r"<\s*difficulty\s*=\s*\w+\s*>\s*", re.I)  # format from the previous script
+
+HEADER_LINE_RE = re.compile(r"^\s*(?:[A-Za-z]:|%)")
+INLINE_FIELD_RE = re.compile(r"\[[A-Za-z]:[^\]]*\]")
+QUOTED_RE = re.compile(r'"[^"]*"')
+DECORATION_RE = re.compile(r"![^!\n]*!|\+[^+\n]*\+")
+NOTE_RE = re.compile(r"(\^{1,2}|_{1,2}|=)?([A-Ga-g])([,']*)(\d*/*\d*)")
+BASE_SEMITONE = {"C": 0, "D": 2, "E": 4, "F": 5, "G": 7, "A": 9, "B": 11}
+
+MAJOR_KEY_FIFTHS = {"C": 0, "G": 1, "D": 2, "A": 3, "E": 4, "B": 5, "F#": 6, "C#": 7,
+                    "F": -1, "Bb": -2, "Eb": -3, "Ab": -4, "Db": -5, "Gb": -6, "Cb": -7}
+MODE_OFFSET = {"": 0, "maj": 0, "ion": 0, "mix": -1, "dor": -2, "m": -3, "min": -3,
+               "aeo": -3, "phr": -4, "loc": -5, "lyd": 1}
 
 
 # -------------------------
-# Feature extraction
+# Reading ABC
 # -------------------------
-def difficulty_features(abc_string):
-    s = str(abc_string or "")
+def header_value(abc, field):
+    """Last value of a header field such as K: or Q:, or None."""
+    values = re.findall(rf"^{field}:\s*(.*)$", abc, flags=re.M)
+    return values[-1].strip() if values else None
 
-    # Remove the unwanted B: and S: tags along with %%book and %%source
-    s = re.sub(r"%%\s*(book|source)", "", s)
-    s = re.sub(r"^B:.*$", "", s, flags=re.MULTILINE)  # Remove B: line
-    s = re.sub(r"^S:.*$", "", s, flags=re.MULTILINE)  # Remove S: line
 
-    unique_pitches = len(set(re.findall(r"[A-Ga-g]", s)))
-    unique_rhythms = len(set(re.findall(r"\d+", s)))
-    accidentals = s.count('^') + s.count('_')
-    ornaments = len(re.findall(r"[~HLMOPSTuv]", s))
-    note_count = len(re.findall(r"[A-Ga-g]", s))
+def key_accidental_count(key):
+    """Number of sharps/flats in a key signature like 'G', 'F#m', 'Ddor'."""
+    if not key:
+        return 0
+    m = re.match(r"([A-Ga-g])([#b]?)\s*([A-Za-z]*)", key)
+    if not m:
+        return 0
+    tonic = m.group(1).upper() + m.group(2)
+    mode = m.group(3).lower()[:3]
+    if mode.startswith("m") and mode not in ("mix", "maj"):
+        mode = "m"
+    if tonic not in MAJOR_KEY_FIFTHS or mode not in MODE_OFFSET:
+        return 0
+    return abs(MAJOR_KEY_FIFTHS[tonic] + MODE_OFFSET[mode])
 
-    tempo_match = re.search(r"Q:\s*(\d+)", s)
-    tempo = int(tempo_match.group(1)) if tempo_match else 100
+
+def music_body(abc):
+    """The note-bearing part of an ABC tune: no headers, comments, chords symbols or annotations."""
+    lines = [line for line in abc.split("\n") if line.strip() and not HEADER_LINE_RE.match(line)]
+    body = "\n".join(lines)
+    body = INLINE_FIELD_RE.sub(" ", body)
+    body = QUOTED_RE.sub(" ", body)
+    return body
+
+
+def note_pitch(accidental, letter, octave_marks):
+    pitch = 60 + BASE_SEMITONE[letter.upper()] + (12 if letter.islower() else 0)
+    pitch += 12 * octave_marks.count("'") - 12 * octave_marks.count(",")
+    pitch += {"^": 1, "^^": 2, "_": -1, "__": -2}.get(accidental or "", 0)
+    return pitch
+
+
+def difficulty_features(abc):
+    """Numeric features of a melody, or None if it has no notes."""
+    body = music_body(abc)
+    ornaments = len(DECORATION_RE.findall(body)) + body.count("~")
+    body = DECORATION_RE.sub(" ", body)
+
+    notes = NOTE_RE.findall(body)
+    if not notes:
+        return None
+    pitches = [note_pitch(acc, letter, octave) for acc, letter, octave, _ in notes]
+    leaps = [abs(b - a) for a, b in zip(pitches, pitches[1:])]
+    bars = max(body.count("|"), 1)
+
+    tempo_text = header_value(abc, "Q")
+    tempo_numbers = re.findall(r"\d+", tempo_text or "")
+    tempo = int(tempo_numbers[-1]) if tempo_numbers else None
 
     return {
-        "unique_pitches": unique_pitches,
-        "unique_rhythms": unique_rhythms,
-        "accidentals": accidentals,
-        "ornaments": ornaments,
-        "note_count": note_count,
-        "tempo": tempo
+        "pitch_range": max(pitches) - min(pitches),
+        "mean_leap": statistics.mean(leaps) if leaps else 0.0,
+        "accidentals": sum(1 for acc, *_ in notes if acc) / len(notes),
+        "key_accidentals": key_accidental_count(header_value(abc, "K")),
+        "rhythm_variety": len({length for *_, length in notes}),
+        "notes_per_bar": len(notes) / bars,
+        "ornaments": ornaments / len(notes),
+        "tempo": tempo,
     }
 
 
 # -------------------------
-# Scoring
+# Records
 # -------------------------
-DEFAULT_WEIGHTS = {
-    "unique_pitches": 1.5,
-    "unique_rhythms": 1.2,
-    "accidentals": 1.3,
-    "ornaments": 1.5,
-    "note_count": 0.01,
-    "tempo": 0.02
-}
-
-
-def calibrated_difficulty_score(abc_string, weights):
-    feats = difficulty_features(abc_string)
-    tempo_factor = max(feats["tempo"] - 60, 0)
-    return (
-            feats["unique_pitches"] * weights["unique_pitches"] +
-            feats["unique_rhythms"] * weights["unique_rhythms"] +
-            feats["accidentals"] * weights["accidentals"] +
-            feats["ornaments"] * weights["ornaments"] +
-            feats["note_count"] * weights["note_count"] +
-            tempo_factor * weights["tempo"]
-    )
-
-
-# -------------------------
-# Helpers: detect ABC presence & tags
-# -------------------------
-DIFFICULTY_RE = re.compile(r"<\s*difficulty\s*=\s*(easy|medium|hard)\s*>", flags=re.I)
-ABC_PRESENCE_RE = re.compile(r"[A-Ga-g]|T:|K:|L:|M:")  # simple heuristic
-
-
-def has_difficulty_tag(s):
-    return bool(s and DIFFICULTY_RE.search(s))
-
-
-def contains_abc(s):
-    return bool(s and ABC_PRESENCE_RE.search(s))
-
-
-# -------------------------
-# Combine input/output scores
-# -------------------------
-def combine_scores(score_in, score_out, method="max", w_in=0.5, w_out=0.5):
-    # score_in/out can be None
-    if score_in is None and score_out is None:
-        return None
-    if score_in is None:
-        return score_out
-    if score_out is None:
-        return score_in
-
-    if method == "max":
-        return max(score_in, score_out)
-    elif method == "avg":
-        return 0.5 * (score_in + score_out)
-    elif method == "weighted":
-        total = w_in + w_out
-        if total == 0:
-            return 0.5 * (score_in + score_out)
-        return (w_in * score_in + w_out * score_out) / total
-    else:
-        # fallback to max
-        return max(score_in, score_out)
-
-
-# -------------------------
-# Auto-calibration (first pass streaming)
-# -------------------------
-def auto_calibrate_from_file(input_path, sample_limit=2000, weights=DEFAULT_WEIGHTS,
-                             combine_method="max", w_in=0.5, w_out=0.5):
-    scores = []
-    seen = 0
-    with open(input_path, "r", encoding="utf-8") as f:
-        for line in f:
-            if not line.strip():
-                continue
-            try:
-                rec = json.loads(line)
-            except Exception:
-                continue
-
-            inp = rec.get("input", "") or ""
-            out = rec.get("output", "") or ""
-
-            # compute per-side scores only if ABC-like content exists on that side
-            s_in = None
-            s_out = None
-            try:
-                if contains_abc(inp):
-                    s_in = calibrated_difficulty_score(inp, weights)
-                if contains_abc(out):
-                    s_out = calibrated_difficulty_score(out, weights)
-            except Exception:
-                pass
-
-            combined = combine_scores(s_in, s_out, method=combine_method, w_in=w_in, w_out=w_out)
-            if combined is not None:
-                scores.append(combined)
-
-            seen += 1
-            if sample_limit and len(scores) >= sample_limit:
-                break
-
-    if not scores:
-        # fallback thresholds
-        return weights, (10.0, 30.0)
-
-    arr = np.array(scores)
-    easy = float(np.percentile(arr, 33))
-    medium = float(np.percentile(arr, 66))
-    return weights, (easy, medium)
-
-
-# -------------------------
-# Difficulty tag selection
-# -------------------------
-def get_difficulty_tag(score, thresholds):
-    if score is None:
-        # default to medium when no score
-        return "<difficulty=medium>"
-    if score <= thresholds[0]:
-        return "<difficulty=easy>"
-    elif score <= thresholds[1]:
-        return "<difficulty=medium>"
-    else:
-        return "<difficulty=hard>"
-
-
-# -------------------------
-# Infer task (preserve if present)
-# -------------------------
-def infer_task(record, output_text):
+def record_task(record):
     if record.get("task"):
-        return str(record["task"])
-    for candidate in ("type", "label"):
-        if candidate in record and record[candidate]:
-            return str(record[candidate])
-    s = (output_text or "") + "\n" + (record.get("input") or "")
-    if re.search(r"%%\s*generation", s, flags=re.I) or "%%generation" in s:
-        return "generation"
-    if re.search(r"%%\s*cataloging", s, flags=re.I) or "%%cataloging" in s:
-        return "cataloging"
-    if re.search(r"%%\s*segmentation", s, flags=re.I) or "%%segmentation" in s:
-        return "segmentation"
-    return "cataloging"
+        return str(record["task"]).strip().lower()
+    for line in (record.get("input") or "").split("\n"):
+        m = TASK_LINE_RE.match(line.strip())
+        if m and m.group(1).lower() not in ("input", "output"):
+            return m.group(1).lower()
+    return None
 
 
-# -------------------------
-# Transform: second pass writes tagged JSONL
-# -------------------------
-def transform_file(input_path, output_path, sample_calib=2000, combine_method="max",
-                   w_in=0.5, w_out=0.5, dataset_name_default="ABC Notation"):
-    print(f"Auto-calibrating from {input_path} (sampling up to {sample_calib}) ...")
-    weights, thresholds = auto_calibrate_from_file(input_path, sample_limit=sample_calib,
-                                                   weights=DEFAULT_WEIGHTS,
-                                                   combine_method=combine_method,
-                                                   w_in=w_in, w_out=w_out)
-    print(f"Calibration done. thresholds: easy <= {thresholds[0]:.4f}, medium <= {thresholds[1]:.4f}")
+def clean_input(text):
+    """Remove any difficulty tag left by an earlier run, in either format."""
+    text = text or ""
+    if not (OLD_TAG_RE.search(text) or DIFFICULTY_LINE_RE.search(text)):
+        return text
+    text = OLD_TAG_RE.sub("", text)
+    return re.sub(r"\n{2,}", "\n", DIFFICULTY_LINE_RE.sub("", text))
 
-    total = 0
-    written = 0
-    with open(input_path, "r", encoding="utf-8") as fi, open(output_path, "w", encoding="utf-8") as fo:
-        for line in fi:
-            total += 1
-            if not line.strip():
-                continue
-            try:
-                rec = json.loads(line)
-            except Exception:
-                continue
 
-            # ensure dataset exists
-            if not rec.get("dataset"):
-                rec["dataset"] = dataset_name_default
+def add_difficulty_line(input_text, difficulty):
+    """Insert '%%difficulty=<level>' right after the task line (or at the start)."""
+    tag = f"%%difficulty={difficulty}"
+    lines = clean_input(input_text).split("\n")
+    for i, line in enumerate(lines):
+        m = TASK_LINE_RE.match(line.strip())
+        if m and m.group(1).lower() not in ("input", "output", "difficulty"):
+            return "\n".join(lines[: i + 1] + [tag] + lines[i + 1:])
+    return tag + "\n" + "\n".join(lines)
 
-            # preserve or infer task
-            task_val = rec.get("task") if rec.get("task") else infer_task(rec, rec.get("output", ""))
-            rec["task"] = task_val
 
-            input_text = rec.get("input", "") or ""
-            output_text = rec.get("output", "") or ""
-
-            # If input already has difficulty tag, keep it exactly
-            if has_difficulty_tag(input_text):
-                new_input = input_text
-            else:
-                # compute per-side scores if ABC-like content exists
-                s_in = None
-                s_out = None
+def read_records(path):
+    with open(path, encoding="utf-8") as f:
+        for line in f:
+            if line.strip():
                 try:
-                    if contains_abc(input_text):
-                        s_in = calibrated_difficulty_score(input_text, weights)
-                    if contains_abc(output_text):
-                        s_out = calibrated_difficulty_score(output_text, weights)
-                except Exception:
-                    s_in = s_in or None
-                    s_out = s_out or None
-
-                combined = combine_scores(s_in, s_out, method=combine_method, w_in=w_in, w_out=w_out)
-
-                # fallback if no combined score
-                if combined is None:
-                    # choose medium by default
-                    tag = "<difficulty=medium>"
-                else:
-                    tag = get_difficulty_tag(combined, thresholds)
-
-                if str(input_text).strip() == "":
-                    new_input = f"{tag} "
-                else:
-                    new_input = f"{tag} {input_text}"
-
-            # preserve output exactly
-            rec["input"] = new_input
-            rec["output"] = output_text
-
-            fo.write(json.dumps(rec, ensure_ascii=False) + "\n")
-            written += 1
-
-    print(f"Finished. Processed {total} lines, wrote {written} records to {output_path}")
+                    yield json.loads(line)
+                except json.JSONDecodeError:
+                    continue
 
 
 # -------------------------
-# CLI
+# Calibration and scoring
 # -------------------------
+class DifficultyScale:
+    """Standardises features and splits scores into easy / medium / hard thirds."""
+
+    def __init__(self, feature_samples):
+        self.stats = {}
+        for name in WEIGHTS:
+            values = [f[name] for f in feature_samples if f[name] is not None]
+            mean = statistics.mean(values) if values else 0.0
+            stdev = statistics.pstdev(values) if len(values) > 1 else 0.0
+            self.stats[name] = (mean, stdev or 1.0)
+        scores = sorted(self.score(f) for f in feature_samples)
+        if len(scores) >= 3:
+            self.cutoffs = (scores[len(scores) // 3], scores[2 * len(scores) // 3])
+        else:
+            self.cutoffs = (0.0, 0.0)
+
+    def score(self, features):
+        total = 0.0
+        for name, weight in WEIGHTS.items():
+            mean, stdev = self.stats[name]
+            value = features[name] if features[name] is not None else mean
+            total += weight * (value - mean) / stdev
+        return total
+
+    def level(self, features):
+        s = self.score(features)
+        if s < self.cutoffs[0]:
+            return "easy"
+        if s < self.cutoffs[1]:
+            return "medium"
+        return "hard"
+
+
+def calibrate(path, sample_size, seed=0):
+    """Reservoir-sample melody features from the whole file (not just its start)."""
+    rng = random.Random(seed)
+    sample, seen = [], 0
+    for record in read_records(path):
+        if record_task(record) not in MELODY_TASKS:
+            continue
+        features = difficulty_features(record.get("output") or "")
+        if features is None:
+            continue
+        seen += 1
+        if len(sample) < sample_size:
+            sample.append(features)
+        else:
+            j = rng.randrange(seen)
+            if j < sample_size:
+                sample[j] = features
+    return DifficultyScale(sample)
+
+
+def tag_file(input_path, output_path, scale):
+    counts = defaultdict(Counter)
+    with open(output_path, "w", encoding="utf-8") as out:
+        for record in read_records(input_path):
+            task = record_task(record)
+            features = difficulty_features(record.get("output") or "") if task in MELODY_TASKS else None
+            if features is None:
+                record["input"] = clean_input(record.get("input"))
+                counts[task]["untagged"] += 1
+            else:
+                level = scale.level(features)
+                record["input"] = add_difficulty_line(record.get("input"), level)
+                counts[task][level] += 1
+            out.write(json.dumps(record, ensure_ascii=False) + "\n")
+    return counts
+
+
+def print_summary(path, counts):
+    print(f"\n{path}")
+    print(f"  {'task':<15}{'easy':>9}{'medium':>9}{'hard':>9}{'untagged':>10}")
+    for task in sorted(counts, key=str):
+        c = counts[task]
+        print(f"  {str(task):<15}{c['easy']:>9}{c['medium']:>9}{c['hard']:>9}{c['untagged']:>10}")
+
+
 def main():
-    p = argparse.ArgumentParser(description="Tag JSONL records using difficulty computed from input+output.")
-    p.add_argument("--input", "-i", default="train.jsonl", help="input JSONL path")
-    p.add_argument("--output", "-o", default="train_tagged.jsonl", help="output JSONL path")
-    p.add_argument("--sample-calib", type=int, default=2000, help="how many combined scores to sample for calibration")
-    p.add_argument("--combine-method", choices=("max", "avg", "weighted"), default="max",
-                   help="how to combine input/output scores into a single difficulty score (default: max)")
-    p.add_argument("--w-input", type=float, default=0.5, help="weight for input when --combine-method weighted")
-    p.add_argument("--w-output", type=float, default=0.5, help="weight for output when --combine-method weighted")
-    p.add_argument("--dataset-name", default="ABC Notation", help="default dataset name if missing")
-    args = p.parse_args()
+    parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    parser.add_argument("inputs", nargs="+", type=Path,
+                        help="JSONL files; the first one is used for calibration")
+    parser.add_argument("--sample-size", type=int, default=20000,
+                        help="melodies sampled for calibration (default: 20000)")
+    args = parser.parse_args()
 
-    transform_file(args.input, args.output, sample_calib=args.sample_calib,
-                   combine_method=args.combine_method, w_in=args.w_input, w_out=args.w_output,
-                   dataset_name_default=args.dataset_name)
+    print(f"Calibrating on {args.inputs[0]} ...")
+    scale = calibrate(args.inputs[0], args.sample_size)
+    print(f"Cut-offs: easy < {scale.cutoffs[0]:.2f} <= medium < {scale.cutoffs[1]:.2f} <= hard")
+
+    for input_path in args.inputs:
+        output_path = input_path.with_name(input_path.stem + "_tagged.jsonl")
+        print_summary(output_path, tag_file(input_path, output_path, scale))
 
 
 if __name__ == "__main__":
