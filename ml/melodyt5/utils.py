@@ -1,6 +1,7 @@
 import re
 import torch
 import random
+import numpy as np
 from config import *
 from unidecode import unidecode
 from samplings import top_p_sampling, top_k_sampling, temperature_sampling
@@ -291,7 +292,12 @@ class MelodyT5(PreTrainedModel):
                 random.seed(n_seed)
             else:
                 n_seed = None
-            prob = self.char_level_decoder.generate(encoded_patches[0][-1], tokens).cpu().detach().numpy()
+            # float64: with NumPy 2, sampling from float32 probabilities fails ~10% of the
+            # time with "probabilities do not sum to 1" due to rounding.
+            prob = self.char_level_decoder.generate(encoded_patches[0][-1], tokens).cpu().detach().numpy().astype(np.float64)
+            if not np.all(np.isfinite(prob)):
+                raise RuntimeError(f"The model produced invalid probabilities (NaN/inf) on {self.device}. "
+                                   "Try running on the CPU to check whether it's a GPU problem.")
             prob = top_p_sampling(prob, top_p=top_p, return_probs=True)
             prob = top_k_sampling(prob, top_k=top_k, return_probs=True)
             token = temperature_sampling(prob, temperature=temperature, seed=n_seed)
