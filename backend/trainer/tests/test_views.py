@@ -6,7 +6,7 @@ from django.test import TestCase
 
 class PageTests(TestCase):
     def test_pages_render(self):
-        for url in ("/home", "/login", "/signup"):
+        for url in ("/", "/home", "/profile", "/login", "/signup"):
             with self.subTest(url=url):
                 self.assertEqual(self.client.get(url).status_code, 200)
 

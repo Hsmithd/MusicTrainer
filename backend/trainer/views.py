@@ -26,7 +26,7 @@ def login_view(request):
             request.POST.get("password"),
         )
         if user is not None:
-            return redirect(index)
+            return redirect("index")
         messages.error(request, "Invalid username or password")
     return render(request, "trainer/login.html")
 
@@ -35,7 +35,7 @@ def signup_view(request):
     if request.method == "POST":
         user, form = AuthService().signup(request, request.POST)
         if user is not None:
-            return redirect(index)
+            return redirect("index")
     else:
         form = CustomUserCreationForm()
     return render(request, "trainer/signup.html", {"form": form})
