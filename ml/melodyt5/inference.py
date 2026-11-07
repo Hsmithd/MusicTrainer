@@ -1,3 +1,4 @@
+import os
 import time
 import torch
 from utils import *
@@ -18,9 +19,19 @@ def get_args(parser):
     parser.add_argument('-temperature', type=float, default=2.6, help='the temperature of the sampling operation')
     parser.add_argument('-seed', type=int, default=None, help='seed for randomstate')
     parser.add_argument('-show_control_code', type=bool, default=True, help='whether to show control code')
+    parser.add_argument('-difficulty', choices=['easy', 'medium', 'hard'], default=None,
+                        help='requested difficulty; needs the fine-tuned weights (WEIGHTS_PATH)')
+    parser.add_argument('-output', default=None,
+                        help='file to write the tunes to (default: output_tunes/<timestamp>.abc)')
     args = parser.parse_args()
 
     return args
+
+
+def add_difficulty_line(input_abc, difficulty):
+    """Insert '%%difficulty=<level>' after the task line, matching ml/data_tagging."""
+    lines = input_abc.split("\n")
+    return "\n".join(lines[:1] + ["%%difficulty=" + difficulty] + lines[1:])
 
 
 def generate_abc(args):
@@ -40,7 +51,11 @@ def generate_abc(args):
                              vocab_size=128)
     model = MelodyT5(patch_config, char_config)
 
-    checkpoint = torch.load(WEIGHTS_PATH, map_location=device)
+    # Prefer the difficulty fine-tuned weights; fall back to the original MelodyT5 weights.
+    finetuned = os.path.exists(WEIGHTS_PATH)
+    weights_file = WEIGHTS_PATH if finetuned else PRETRAINED_PATH
+    print("Weights: " + weights_file)
+    checkpoint = torch.load(weights_file, map_location=device)
     model.load_state_dict(checkpoint['model'], strict=False)
     model = model.to(device)
     model.eval()
@@ -58,6 +73,12 @@ def generate_abc(args):
         prompt = prompt.split("%%output\n")[1]
     task = input_abc.split("\n")[0][2:]
 
+    if args.difficulty:
+        if finetuned:
+            input_abc = add_difficulty_line(input_abc, args.difficulty)
+        else:
+            print("Note: -difficulty ignored; " + WEIGHTS_PATH + " (fine-tuned weights) not found.")
+
     tunes = ""
     num_tunes = args.num_tunes
     max_patch = args.max_patch
@@ -66,6 +87,7 @@ def generate_abc(args):
     temperature = args.temperature
     seed = args.seed
     show_control_code = args.show_control_code
+    output_file = args.output
 
     print(" HYPERPARAMETERS ".center(60, "#"), '\n')
     args = vars(args)
@@ -124,7 +146,8 @@ def generate_abc(args):
 
     print("Generation time: {:.2f} seconds".format(time.time() - start_time))
     timestamp = time.strftime("%a_%d_%b_%Y_%H_%M_%S", time.localtime())
-    with open('output_tunes/' + timestamp + '.abc', 'w') as f:
+    output_path = output_file or os.path.join('output_tunes', timestamp + '.abc')
+    with open(output_path, 'w') as f:
         f.write(tunes)
 
 

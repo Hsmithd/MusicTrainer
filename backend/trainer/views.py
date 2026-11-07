@@ -3,6 +3,8 @@
 Keep logic out of here — put business rules in ``trainer/services`` and data
 access in ``trainer/repositories``.
 """
+import json
+
 from django.conf import settings
 from django.contrib import messages
 from django.http import HttpResponse, JsonResponse
@@ -52,8 +54,23 @@ def signup_view(request):
 @csrf_exempt
 @require_http_methods(["POST"])
 def generate_etude(request):
+    """POST {"difficulty": "easy" | "medium" | "hard"} -> generated ABC notation."""
     try:
-        abc = EtudeService().generate()
+        body = json.loads(request.body or b"{}")
+    except json.JSONDecodeError:
+        body = None
+    if not isinstance(body, dict):
+        return JsonResponse({"success": False, "error": "Request body must be JSON"}, status=400)
+
+    difficulty = body.get("difficulty")
+    if difficulty is not None and difficulty not in EtudeService.DIFFICULTIES:
+        return JsonResponse(
+            {"success": False, "error": f"difficulty must be one of {', '.join(EtudeService.DIFFICULTIES)}"},
+            status=400,
+        )
+
+    try:
+        abc = EtudeService().generate(difficulty)
     except (EtudeGenerationError, OSError) as e:
         return JsonResponse({"success": False, "error": str(e)})
     return JsonResponse({

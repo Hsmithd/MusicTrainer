@@ -28,7 +28,7 @@ function Home() {
     const handleGenerate = async () => {
         setIsGenerating(true);
         try {
-            const data = await generateEtude({ difficulty, complexity, speed });
+            const data = await generateEtude({ difficulty });
 
             if (data.success && data.abc_notation) {
                 const tunes = data.abc_notation.split('\n\n');

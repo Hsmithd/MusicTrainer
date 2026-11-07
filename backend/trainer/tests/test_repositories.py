@@ -1,4 +1,3 @@
-import os
 import tempfile
 from pathlib import Path
 
@@ -9,17 +8,21 @@ from trainer.repositories import EtudeRepository, UserRepository
 
 
 class EtudeRepositoryTests(TestCase):
-    def test_returns_none_when_no_files(self):
+    def test_new_output_paths_are_unique_and_in_output_dir(self):
         with tempfile.TemporaryDirectory() as d:
-            self.assertIsNone(EtudeRepository(d).get_latest_abc())
+            repo = EtudeRepository(Path(d, "out"))
+            a, b = repo.new_output_path(), repo.new_output_path()
+            self.assertNotEqual(a, b)
+            self.assertEqual(a.parent, Path(d, "out"))
+            self.assertTrue(a.parent.is_dir())
 
-    def test_returns_latest_file(self):
+    def test_read(self):
         with tempfile.TemporaryDirectory() as d:
-            old, new = Path(d, "a.abc"), Path(d, "b.abc")
-            old.write_text("old")
-            new.write_text("new")
-            os.utime(old, (1, 1))
-            self.assertEqual(EtudeRepository(d).get_latest_abc(), "new")
+            repo = EtudeRepository(d)
+            path = repo.new_output_path()
+            self.assertIsNone(repo.read(path))
+            path.write_text("X:1")
+            self.assertEqual(repo.read(path), "X:1")
 
 
 class UserRepositoryTests(TestCase):

@@ -12,6 +12,8 @@ class EtudeGenerationError(Exception):
 class EtudeService:
     """Generates practice etudes by running the MelodyT5 inference script."""
 
+    DIFFICULTIES = ("easy", "medium", "hard")
+
     INFERENCE_ARGS = [
         "-num_tunes", "1",
         "-max_patch", "128",
@@ -24,16 +26,27 @@ class EtudeService:
     def __init__(self, repository=None):
         self.repository = repository or EtudeRepository()
 
-    def generate(self):
-        """Run the model and return the generated ABC notation."""
+    def generate(self, difficulty=None):
+        """Run the model and return the generated ABC notation.
+
+        ``difficulty`` is "easy", "medium" or "hard". It only has an effect
+        once the difficulty fine-tuned weights exist (see ml/melodyt5/config.py).
+        """
+        if difficulty is not None and difficulty not in self.DIFFICULTIES:
+            raise ValueError(f"difficulty must be one of {', '.join(self.DIFFICULTIES)}")
+
         model_dir = settings.MELODYT5_DIR
-        command = [settings.MELODYT5_PYTHON, str(model_dir / "inference.py"), *self.INFERENCE_ARGS]
+        output_path = self.repository.new_output_path()
+        command = [settings.MELODYT5_PYTHON, str(model_dir / "inference.py"),
+                   *self.INFERENCE_ARGS, "-output", str(output_path)]
+        if difficulty:
+            command += ["-difficulty", difficulty]
 
         result = subprocess.run(command, capture_output=True, text=True, cwd=model_dir)
         if result.returncode != 0:
             raise EtudeGenerationError(result.stderr or "Script execution failed")
 
-        abc = self.repository.get_latest_abc()
+        abc = self.repository.read(output_path)
         if abc is None:
             raise EtudeGenerationError("No output file generated")
         return abc

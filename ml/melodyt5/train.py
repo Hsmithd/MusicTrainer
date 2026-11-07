@@ -21,14 +21,20 @@ world_size = int(os.environ.get('WORLD_SIZE', 1))
 global_rank = int(os.environ.get('RANK', 0))
 local_rank = int(os.environ.get('LOCAL_RANK', 0))
 
+# Use a GPU when there is one (e.g. the cluster via training.sh), otherwise the CPU.
+use_cuda = torch.cuda.is_available()
+if use_cuda:
+    torch.cuda.set_device(local_rank)
+    device = torch.device("cuda", local_rank)
+else:
+    device = torch.device("cpu")
+
 if world_size > 1:
     os.environ['USE_LIBUV'] = '0'  # Disable libuv on Windows
-    dist.init_process_group(backend='gloo', init_method='env://')  # Use gloo for CPU
-    print(f"[Rank {global_rank}] Distributed training enabled (world size={world_size})")
+    dist.init_process_group(backend='nccl' if use_cuda else 'gloo', init_method='env://')
+    print(f"[Rank {global_rank}] Distributed training enabled (world size={world_size}, device={device})")
 else:
-    print("Single-CPU mode")
-
-device = torch.device("cpu")  # Explicitly set to CPU
+    print(f"Single-process mode (device={device})")
 
 # -------------------------
 # Reproducibility
@@ -59,7 +65,7 @@ model = MelodyT5(patch_config, char_config).to(device)
 print("Parameter Number:", sum(p.numel() for p in model.parameters() if p.requires_grad))
 
 if world_size > 1:
-    model = DDP(model, find_unused_parameters=True)  # No device_ids for CPU
+    model = DDP(model, device_ids=[local_rank] if use_cuda else None, find_unused_parameters=True)
 
 optimizer = torch.optim.AdamW(model.parameters(), lr=LEARNING_RATE)
 
@@ -181,7 +187,9 @@ if __name__ == "__main__":
             cpu_model = deepcopy(model)
             cpu_model.load_state_dict(checkpoint['model'])
             model.load_state_dict(cpu_model.state_dict())
-        print(f"Loaded pretrained checkpoint at epoch {checkpoint['epoch']}")
+        print(f"Loaded pretrained weights from {PRETRAINED_PATH}")
+    elif LOAD_FROM_PRETRAINED:
+        raise FileNotFoundError(f"{PRETRAINED_PATH} not found. Download the MelodyT5 weights first (see README).")
 
     if LOAD_FROM_CHECKPOINT and os.path.exists(WEIGHTS_PATH):
         checkpoint = torch.load(WEIGHTS_PATH, map_location='cpu')

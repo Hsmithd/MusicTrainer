@@ -48,8 +48,27 @@ class AuthPageTests(TestCase):
 
 
 class GenerateEtudeViewTests(TestCase):
+    def post(self, body):
+        return self.client.post("/api/generate-etude/", body, content_type="application/json")
+
+    @mock.patch("trainer.views.EtudeService.generate", return_value="X:1")
+    def test_passes_difficulty_to_service(self, generate):
+        resp = self.post({"difficulty": "easy"})
+        self.assertEqual(resp.json()["abc_notation"], "X:1")
+        generate.assert_called_once_with("easy")
+
+    @mock.patch("trainer.views.EtudeService.generate", return_value="X:1")
+    def test_difficulty_is_optional(self, generate):
+        self.post({})
+        generate.assert_called_once_with(None)
+
+    def test_rejects_bad_requests(self):
+        self.assertEqual(self.post({"difficulty": "extreme"}).status_code, 400)
+        self.assertEqual(self.post("not json").status_code, 400)
+        self.assertEqual(self.post([1, 2]).status_code, 400)
+
     @mock.patch("trainer.services.etude_service.subprocess.run")
     def test_returns_error_json(self, run):
         run.return_value = mock.Mock(returncode=1, stderr="boom")
-        resp = self.client.post("/api/generate-etude/")
+        resp = self.post({"difficulty": "medium"})
         self.assertEqual(resp.json(), {"success": False, "error": "boom"})

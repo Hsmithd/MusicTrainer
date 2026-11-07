@@ -47,3 +47,32 @@ Tests (no torch needed):
 ```bash
 python -m unittest discover ml/data_tagging
 ```
+
+## Fine-tuning for difficulty
+
+`ml/melodyt5/config.py` is set up to fine-tune: it starts from the original
+weights (`weights.pth`, never overwritten) and saves the best epoch to
+`weights_difficulty.pth`. It uses a GPU when one is available.
+
+1. Put `weights.pth` in `ml/melodyt5/` and the tagged data in `ml/data/melodyhub/`.
+2. From `ml/melodyt5/`, train on one GPU with `python train.py`, or on the
+   cluster with `sbatch training.sh` (2 GPUs).
+3. Copy `weights_difficulty.pth` back into `ml/melodyt5/` on the machine
+   running the app.
+
+If training stops partway, set `LOAD_FROM_CHECKPOINT = True` to resume from
+`weights_difficulty.pth`.
+
+## How the app uses it
+
+The difficulty slider sends `easy`/`medium`/`hard` to `/api/generate-etude/`,
+and the backend runs:
+
+```bash
+python inference.py -difficulty easy -output output_tunes/etude_<id>.abc ...
+```
+
+`inference.py` loads `weights_difficulty.pth` if it exists and adds
+`%%difficulty=<level>` to the prompt, the same as the tagged training data.
+Until that file exists it uses `weights.pth` and ignores the difficulty, since
+the original model was never taught the tag.
