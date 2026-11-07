@@ -140,3 +140,7 @@ pids/
 .yarn-integrity
 # Model weights (large; download separately, see ml/melodyt5/README.md)
 *.pth
+
+# Training data (large; download separately, see ml/README.md)
+ml/data/
+*.jsonl

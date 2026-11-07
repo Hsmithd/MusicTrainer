@@ -13,8 +13,10 @@ LOAD_FROM_CHECKPOINT = False     # Whether to load weights from a checkpoint
 LOAD_FROM_PRETRAINED = False    # Whether to load weights from a pretrained model
 SHARE_WEIGHTS = False            # Whether to share weights between the encoder and decoder
 
-TRAIN_DATA_PATH      = 'train_tagged.jsonl'
-VALIDATION_DATA_PATH = 'validation_tagged.jsonl'
+# Paths are relative to ml/melodyt5 (where train.py runs). Data is not in git;
+# see ml/README.md for how to download and tag it.
+TRAIN_DATA_PATH      = '../data/melodyhub/train_tagged.jsonl'
+VALIDATION_DATA_PATH = '../data/melodyhub/validation_tagged.jsonl'
 
 PRETRAINED_PATH = "weights.pth" # Path to the pretrained weights
 WEIGHTS_PATH = "weights.pth"    # Path to save the weights
