@@ -1,140 +1,140 @@
 # Python/Django
-     __pycache__/
-     *.py[cod]
-     *$py.class
-     *.so
-     .Python
-     *.sqlite3
-     db.sqlite3
-     db.sqlite3-journal
-     media/
-     .env
-     .venv
-     env/
-     venv/
-     ENV/
-     env.bak/
-     venv.bak/
-     *.log
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.sqlite3
+db.sqlite3
+db.sqlite3-journal
+media/
+.env
+.venv
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+*.log
 
-     # Django stuff
-     *.pot
-     *.pyc
-     local_settings.py
-     staticfiles/
-     .static/
-     migrations/__pycache__/
+# Django stuff
+*.pot
+*.pyc
+local_settings.py
+staticfiles/
+.static/
+migrations/__pycache__/
 
-     # Python distribution / packaging
-     .Python
-     build/
-     develop-eggs/
-     dist/
-     downloads/
-     eggs/
-     .eggs/
-     lib/
-     lib64/
-     parts/
-     sdist/
-     var/
-     wheels/
-     share/python-wheels/
-     *.egg-info/
-     .installed.cfg
-     *.egg
-     MANIFEST
+# Python distribution / packaging
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
 
-     # React/Node.js
-     node_modules/
-     /build
-     .DS_Store
-     .env.local
-     .env.development.local
-     .env.test.local
-     .env.production.local
-     npm-debug.log*
-     yarn-debug.log*
-     yarn-error.log*
-     coverage/
-     .next/
-     dist/
-     build/
-     .cache/
-     .parcel-cache/
+# React/Node.js
+node_modules/
+/build
+.DS_Store
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+coverage/
+.next/
+dist/
+build/
+.cache/
+.parcel-cache/
 
-     # Package managers
-     package-lock.json
-     yarn.lock
-     pnpm-lock.yaml
+# Package managers
+package-lock.json
+yarn.lock
+pnpm-lock.yaml
 
-     # IDE specific files
-     .idea/
-     .vscode/
-     *.swp
-     *.swo
-     *~
-     .project
-     .pydevproject
+# IDE specific files
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+.project
+.pydevproject
 
-     # Testing
-     .coverage
-     htmlcov/
-     .pytest_cache/
-     .tox/
-     .nox/
-     coverage.xml
-     *.cover
-     *.py,cover
-     .hypothesis/
+# Testing
+.coverage
+htmlcov/
+.pytest_cache/
+.tox/
+.nox/
+coverage.xml
+*.cover
+*.py,cover
+.hypothesis/
 
-     # Jupyter Notebook
-     .ipynb_checkpoints
+# Jupyter Notebook
+.ipynb_checkpoints
 
-     # pyenv
-     .python-version
+# pyenv
+.python-version
 
-     # pipenv
-     Pipfile.lock
+# pipenv
+Pipfile.lock
 
-     # conda
-     .conda/
+# conda
+.conda/
 
-     # Misc
-     *.bak
-     *.tmp
-     *.temp
-     .DS_Store
-     Thumbs.db
+# Misc
+*.bak
+*.tmp
+*.temp
+.DS_Store
+Thumbs.db
 
-     # Security
-     *.pem
-     *.key
-     *.crt
-     *.csr
+# Security
+*.pem
+*.key
+*.crt
+*.csr
 
-     # Logs
-     logs/
-     *.log
-     npm-debug.log*
-     yarn-debug.log*
-     yarn-error.log*
-     lerna-debug.log*
+# Logs
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+lerna-debug.log*
 
-     # Runtime data
-     pids/
-     *.pid
-     *.seed
-     *.pid.lock
+# Runtime data
+pids/
+*.pid
+*.seed
+*.pid.lock
 
-     # Optional npm cache directory
-     .npm
+# Optional npm cache directory
+.npm
 
-     # Optional eslint cache
-     .eslintcache
+# Optional eslint cache
+.eslintcache
 
-     # Output of 'npm pack'
-     *.tgz
+# Output of 'npm pack'
+*.tgz
 
-     # Yarn Integrity file
-     .yarn-integrity
+# Yarn Integrity file
+.yarn-integrity
