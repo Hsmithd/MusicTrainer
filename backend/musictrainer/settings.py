@@ -10,6 +10,7 @@ For the full list of settings and their values, see
 https://docs.djangoproject.com/en/5.2/ref/settings/
 """
 import os
+import sys
 from pathlib import Path
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
@@ -134,8 +135,10 @@ STATICFILES_DIRS = [
 # MelodyT5 model used to generate etudes (lives in /ml, not in the backend)
 MELODYT5_DIR = ML_DIR / 'melodyt5'
 MELODYT5_OUTPUT_DIR = MELODYT5_DIR / 'output_tunes'
-# Python interpreter for the model; point this at the melodyt5 conda env if separate
-MELODYT5_PYTHON = os.environ.get('MELODYT5_PYTHON', 'python')
+# Python interpreter for the model. Defaults to the one running Django (your
+# virtualenv). A plain 'python' can resolve to the system Python on Windows,
+# which doesn't have torch. Set MELODYT5_PYTHON to use a separate environment.
+MELODYT5_PYTHON = os.environ.get('MELODYT5_PYTHON', sys.executable)
 
 
 
