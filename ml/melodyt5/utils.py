@@ -1,6 +1,7 @@
 import re
 import torch
 import random
+from copy import deepcopy
 import numpy as np
 from config import *
 from unidecode import unidecode
@@ -82,6 +83,25 @@ class Patchilizer:
         """
         return ''.join(self.patch2bar(patch) for patch in patches)
 
+# Buffers older versions of transformers stored in GPT-2 checkpoints; current versions don't use them.
+LEGACY_BUFFER_SUFFIXES = (".attn.bias", ".attn.masked_bias", ".crossattention.bias", ".crossattention.masked_bias")
+
+
+def load_weights(model, state_dict):
+    """Load MelodyT5 weights, ignoring only harmless legacy buffers.
+
+    Raises if any real weight is missing or unexpected, so a mismatch between the
+    model and the checkpoint can't go unnoticed.
+    """
+    state_dict = {k: v for k, v in state_dict.items() if not k.endswith(LEGACY_BUFFER_SUFFIXES)}
+    result = model.load_state_dict(state_dict, strict=False)
+    missing = [k for k in result.missing_keys if not k.endswith(LEGACY_BUFFER_SUFFIXES)]
+    if missing or result.unexpected_keys:
+        raise RuntimeError(f"Weights don't match the model. Missing: {missing[:5]} "
+                           f"({len(missing)} total). Unexpected: {result.unexpected_keys[:5]} "
+                           f"({len(result.unexpected_keys)} total).")
+
+
 class PatchLevelEnDecoder(PreTrainedModel):
     """
     An Patch-level Decoder model for generating patch features in an auto-regressive manner. 
@@ -100,7 +120,10 @@ class PatchLevelEnDecoder(PreTrainedModel):
                 print("Please run 'random_model.py' to create randomly initialized weights.")
                 raise
         else:
-            config = EncoderDecoderConfig.from_encoder_decoder_configs(config, config)
+            # Pass copies: from_encoder_decoder_configs turns on cross-attention in the
+            # decoder config, and with one shared object the encoder got it too, which the
+            # pretrained MelodyT5 encoder doesn't have.
+            config = EncoderDecoderConfig.from_encoder_decoder_configs(deepcopy(config), deepcopy(config))
             self.config = config
             self.base = EncoderDecoderModel(config=self.config)
 

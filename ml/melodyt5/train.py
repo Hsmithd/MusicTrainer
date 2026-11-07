@@ -5,7 +5,6 @@ from array import array
 import torch
 import random
 import numpy as np
-from copy import deepcopy
 from utils import *
 from config import *
 from tqdm import tqdm
@@ -193,28 +192,14 @@ if __name__ == "__main__":
     pre_epoch, best_epoch, min_eval_loss = 0, 0, float('inf')
     if LOAD_FROM_PRETRAINED and os.path.exists(PRETRAINED_PATH):
         checkpoint = torch.load(PRETRAINED_PATH, map_location='cpu')
-        if world_size > 1 and hasattr(model, 'module'):
-            cpu_model = deepcopy(model.module)
-            cpu_model.load_state_dict(checkpoint['model'])
-            model.module.load_state_dict(cpu_model.state_dict())
-        else:
-            cpu_model = deepcopy(model)
-            cpu_model.load_state_dict(checkpoint['model'])
-            model.load_state_dict(cpu_model.state_dict())
+        load_weights(model.module if hasattr(model, 'module') else model, checkpoint['model'])
         print(f"Loaded pretrained weights from {PRETRAINED_PATH}")
     elif LOAD_FROM_PRETRAINED:
         raise FileNotFoundError(f"{PRETRAINED_PATH} not found. Download the MelodyT5 weights first (see README).")
 
     if LOAD_FROM_CHECKPOINT and os.path.exists(WEIGHTS_PATH):
         checkpoint = torch.load(WEIGHTS_PATH, map_location='cpu')
-        if world_size > 1 and hasattr(model, 'module'):
-            cpu_model = deepcopy(model.module)
-            cpu_model.load_state_dict(checkpoint['model'])
-            model.module.load_state_dict(cpu_model.state_dict())
-        else:
-            cpu_model = deepcopy(model)
-            cpu_model.load_state_dict(checkpoint['model'])
-            model.load_state_dict(cpu_model.state_dict())
+        load_weights(model.module if hasattr(model, 'module') else model, checkpoint['model'])
         optimizer.load_state_dict(checkpoint['optimizer'])
         lr_scheduler.load_state_dict(checkpoint['lr_sched'])
         pre_epoch = checkpoint['epoch']

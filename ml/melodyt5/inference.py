@@ -56,7 +56,7 @@ def generate_abc(args):
     weights_file = WEIGHTS_PATH if finetuned else PRETRAINED_PATH
     print("Weights: " + weights_file)
     checkpoint = torch.load(weights_file, map_location=device)
-    model.load_state_dict(checkpoint['model'], strict=False)
+    load_weights(model, checkpoint['model'])
     model = model.to(device)
     model.eval()
     # print parameter number
