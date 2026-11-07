@@ -60,8 +60,13 @@ weights (`weights.pth`, never overwritten) and saves the best epoch to
 3. Copy `weights_difficulty.pth` back into `ml/melodyt5/` on the machine
    running the app.
 
-If training stops partway, set `LOAD_FROM_CHECKPOINT = True` to resume from
-`weights_difficulty.pth`.
+Training reads examples from disk as it goes, so it doesn't need much memory.
+On one GPU each epoch uses `TRAIN_SAMPLES_PER_EPOCH` random examples (100,000
+by default, different each epoch); set it to `None` to use all ~1.4 million.
+Watch the time estimate on the progress bar and adjust it or `NUM_EPOCHS`.
+
+`weights_difficulty.pth` is about 2 GB because it also stores the optimizer
+state. If training stops partway, set `LOAD_FROM_CHECKPOINT = True` to resume.
 
 ## How the app uses it
 

@@ -1,6 +1,7 @@
 import os
 import time
 import json
+from array import array
 import torch
 import random
 import numpy as np
@@ -8,7 +9,7 @@ from copy import deepcopy
 from utils import *
 from config import *
 from tqdm import tqdm
-from torch.utils.data import Dataset, DataLoader
+from torch.utils.data import Dataset, DataLoader, RandomSampler
 from transformers import GPT2Config, get_constant_schedule_with_warmup
 import torch.distributed as dist
 from torch.nn.parallel import DistributedDataParallel as DDP
@@ -89,21 +90,33 @@ def collate_batch(batch):
     return input_patches.to(device), input_masks.to(device), output_patches.to(device), output_masks.to(device)
 
 class MelodyHubDataset(Dataset):
-    def __init__(self, items):
-        self.inputs = []
-        self.outputs = []
-        for item in tqdm(items):
-            input_patch = torch.tensor(patchilizer.encode(item['input'], add_special_patches=True))
-            output_patch = torch.tensor(patchilizer.encode(item['output'], add_special_patches=True))
-            if torch.sum(output_patch) != 0:
-                self.inputs.append(input_patch)
-                self.outputs.append(output_patch)
+    """Reads examples from a JSONL file on demand, so memory use stays small.
+
+    Only the byte offset of each line is kept in memory (8 bytes per example);
+    each example is read and encoded when the DataLoader asks for it.
+    """
+    def __init__(self, path):
+        self.path = path
+        self.offsets = array('q')
+        with open(path, 'rb') as f:
+            position = 0
+            for line in f:
+                if line.strip():
+                    self.offsets.append(position)
+                position += len(line)
+        self.file = None
 
     def __len__(self):
-        return len(self.inputs)
+        return len(self.offsets)
 
     def __getitem__(self, idx):
-        return self.inputs[idx], self.outputs[idx]
+        if self.file is None:
+            self.file = open(self.path, 'rb')
+        self.file.seek(self.offsets[idx])
+        item = json.loads(self.file.readline())
+        input_patch = torch.tensor(patchilizer.encode(item['input'], add_special_patches=True))
+        output_patch = torch.tensor(patchilizer.encode(item['output'], add_special_patches=True))
+        return input_patch, output_patch
 
 # -------------------------
 # Training / Evaluation
@@ -119,7 +132,7 @@ def process_one_batch(batch):
     return loss
 
 def train_epoch():
-    tqdm_train_set = tqdm(train_set)
+    tqdm_train_set = tqdm(train_loader)
     total_train_loss, iter_idx = 0, 1
     model.train()
     for batch in tqdm_train_set:
@@ -136,7 +149,7 @@ def train_epoch():
     return total_train_loss/(iter_idx-1)
 
 def eval_epoch():
-    tqdm_eval_set = tqdm(eval_set)
+    tqdm_eval_set = tqdm(eval_loader)
     total_eval_loss, iter_idx = 0, 1
     model.eval()
     for batch in tqdm_eval_set:
@@ -153,25 +166,26 @@ def eval_epoch():
 # Main
 # -------------------------
 if __name__ == "__main__":
-    # Load data
-    train_items, eval_items = [], []
-    with open(TRAIN_DATA_PATH, 'r', encoding='utf-8') as f:
-        for line in f: train_items.append(json.loads(line.strip()))
-    with open(VALIDATION_DATA_PATH, 'r', encoding='utf-8') as f:
-        for line in f: eval_items.append(json.loads(line.strip()))
+    # Data is read from disk as needed (see MelodyHubDataset), not loaded into memory.
+    train_set = MelodyHubDataset(TRAIN_DATA_PATH)
+    eval_set = MelodyHubDataset(VALIDATION_DATA_PATH)
+    print(f"Training examples: {len(train_set)}, validation examples: {len(eval_set)}")
 
-    # Trim to batch multiples
-    train_items = train_items[:(len(train_items)//batch_size)*batch_size]
-    eval_items = eval_items[:(len(eval_items)//batch_size)*batch_size]
+    if world_size > 1:
+        train_sampler = DistributedSampler(train_set, num_replicas=world_size, rank=local_rank)
+        eval_sampler = DistributedSampler(eval_set, num_replicas=world_size, rank=local_rank)
+    else:
+        # Each epoch trains on a fresh random subset of TRAIN_SAMPLES_PER_EPOCH examples
+        # (or everything if it's None), so an epoch takes a predictable amount of time.
+        num_samples = min(TRAIN_SAMPLES_PER_EPOCH or len(train_set), len(train_set))
+        train_sampler = RandomSampler(train_set, num_samples=num_samples)
+        eval_sampler = None
+        print(f"Examples per epoch: {num_samples}")
 
-    train_set = MelodyHubDataset(train_items)
-    eval_set = MelodyHubDataset(eval_items)
-
-    train_sampler = DistributedSampler(train_set, num_replicas=world_size, rank=local_rank) if world_size > 1 else None
-    eval_sampler = DistributedSampler(eval_set, num_replicas=world_size, rank=local_rank) if world_size > 1 else None
-
-    train_loader = DataLoader(train_set, batch_size=batch_size, collate_fn=collate_batch, sampler=train_sampler, shuffle=(train_sampler is None))
-    eval_loader = DataLoader(eval_set, batch_size=batch_size, collate_fn=collate_batch, sampler=eval_sampler, shuffle=(eval_sampler is None))
+    train_loader = DataLoader(train_set, batch_size=batch_size, collate_fn=collate_batch,
+                              sampler=train_sampler, drop_last=True)
+    eval_loader = DataLoader(eval_set, batch_size=batch_size, collate_fn=collate_batch,
+                             sampler=eval_sampler, drop_last=True)
 
     lr_scheduler = get_constant_schedule_with_warmup(optimizer=optimizer, num_warmup_steps=1000)
 
@@ -210,8 +224,9 @@ if __name__ == "__main__":
 
     # Training loop
     for epoch in range(pre_epoch+1, NUM_EPOCHS+1):
-        if train_sampler: train_sampler.set_epoch(epoch)
-        if eval_sampler: eval_sampler.set_epoch(epoch)
+        if world_size > 1:
+            train_sampler.set_epoch(epoch)
+            eval_sampler.set_epoch(epoch)
         print('-'*21 + f" Epoch {epoch} " + '-'*21)
 
         train_loss = train_epoch()
