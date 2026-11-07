@@ -42,6 +42,14 @@ class FeatureTests(unittest.TestCase):
         self.assertIsNone(dt.difficulty_features("S:2\nB:5\nE:4\n"))
 
 
+class SegmentationTests(unittest.TestCase):
+    def test_phrase_marks_are_not_ornaments(self):
+        plain = {"task": "segmentation", "output": "X:1\nL:1/8\nK:G\nGABc dBGB | cBAG A4 | GABc dBGB | AGFA G4 |]\n"}
+        marked = {"task": "segmentation", "output": "X:1\nL:1/8\nK:G\nGABc dBGB | cBAG A4 !| GABc dBGB | AGFA G4 !|]\n"}
+        self.assertEqual(dt.melody_features(marked, "segmentation"), dt.melody_features(plain, "segmentation"))
+        self.assertEqual(dt.melody_features(marked, "segmentation")["ornaments"], 0)
+
+
 class TagFormatTests(unittest.TestCase):
     def test_tag_goes_after_task_line(self):
         self.assertEqual(dt.add_difficulty_line("%%generation\n", "easy"),

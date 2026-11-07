@@ -138,6 +138,17 @@ def difficulty_features(abc):
 # -------------------------
 # Records
 # -------------------------
+def melody_features(record, task):
+    """Difficulty features of a record's output melody, or None if it isn't one."""
+    if task not in MELODY_TASKS:
+        return None
+    output = record.get("output") or ""
+    if task == "segmentation":
+        # '!' marks phrase boundaries in segmentation outputs; it isn't an ornament.
+        output = output.replace("!", "")
+    return difficulty_features(output)
+
+
 def record_task(record):
     if record.get("task"):
         return str(record["task"]).strip().lower()
@@ -219,9 +230,7 @@ def calibrate(path, sample_size, seed=0):
     rng = random.Random(seed)
     sample, seen = [], 0
     for record in read_records(path):
-        if record_task(record) not in MELODY_TASKS:
-            continue
-        features = difficulty_features(record.get("output") or "")
+        features = melody_features(record, record_task(record))
         if features is None:
             continue
         seen += 1
@@ -239,7 +248,7 @@ def tag_file(input_path, output_path, scale):
     with open(output_path, "w", encoding="utf-8") as out:
         for record in read_records(input_path):
             task = record_task(record)
-            features = difficulty_features(record.get("output") or "") if task in MELODY_TASKS else None
+            features = melody_features(record, task)
             if features is None:
                 record["input"] = clean_input(record.get("input"))
                 counts[task]["untagged"] += 1
