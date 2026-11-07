@@ -10,7 +10,7 @@ MusicTrainer/
 │       └── components/
 ├── backend/           Django project
 │   ├── manage.py
-│   ├── DjangoProject/ settings, root urls, wsgi/asgi
+│   ├── musictrainer/  project settings, root urls, wsgi/asgi
 │   └── App/
 │       ├── views.py        HTTP layer: requests in, responses out
 │       ├── services/       business logic (auth, etude generation)
@@ -26,7 +26,7 @@ MusicTrainer/
 Dependencies only point one way inside the backend:
 `views → services → repositories → database / files`.
 The backend reaches the model only through `EtudeService`, using the paths
-configured in `backend/DjangoProject/settings.py` (`MELODYT5_DIR`,
+configured in `backend/musictrainer/settings.py` (`MELODYT5_DIR`,
 `MELODYT5_PYTHON`).
 
 ## Running locally
