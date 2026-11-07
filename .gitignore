@@ -138,3 +138,5 @@ pids/
 
 # Yarn Integrity file
 .yarn-integrity
+# Model weights (large; download separately, see ml/melodyt5/README.md)
+*.pth
