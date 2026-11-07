@@ -3,8 +3,9 @@
 Keep logic out of here — put business rules in ``trainer/services`` and data
 access in ``trainer/repositories``.
 """
+from django.conf import settings
 from django.contrib import messages
-from django.http import JsonResponse
+from django.http import HttpResponse, JsonResponse
 from django.shortcuts import redirect, render
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_http_methods
@@ -14,8 +15,15 @@ from trainer.services import AuthService, EtudeGenerationError, EtudeService
 
 
 def index(request):
-    """Serve the React single-page app (built from /frontend)."""
-    return render(request, "trainer/index.html")
+    """Serve the React app's page; React then decides what to show for the URL."""
+    index_file = settings.FRONTEND_BUILD_DIR / "index.html"
+    if not index_file.exists():
+        return HttpResponse(
+            "The frontend hasn't been built yet. Run `npm run build` in the frontend folder.",
+            status=503,
+            content_type="text/plain",
+        )
+    return HttpResponse(index_file.read_text())
 
 
 def login_view(request):

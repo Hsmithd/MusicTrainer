@@ -1,7 +1,8 @@
 # MusicTrainer frontend
 
-React app bundled with webpack. Django serves the bundle (`build/main.js`)
-from the page in `backend/trainer/templates/trainer/index.html`.
+React app bundled with webpack. `npm run build` writes `build/index.html`
+(generated from `index.html` in this folder) and a hashed bundle
+`build/main.<hash>.js`. Django serves both.
 
 ```
 src/
@@ -20,14 +21,15 @@ Install dependencies once:
 npm install
 ```
 
-Build once (do this before starting Django):
+Develop with instant reloads at http://localhost:3000 (keep Django running on
+port 8000; API and login requests are forwarded to it):
+
+```bash
+npm start
+```
+
+Build for Django to serve at http://localhost:8000:
 
 ```bash
 npm run build
-```
-
-Rebuild automatically while you edit:
-
-```bash
-npm run dev
 ```

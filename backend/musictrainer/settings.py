@@ -124,9 +124,11 @@ USE_TZ = True
 
 STATIC_URL = '/static/'
 STATIC_ROOT = BASE_DIR / 'staticfiles'
+# Output of `npm run build` in /frontend: index.html plus the hashed bundle.
+# index.html is served by trainer.views.index; the bundle as a static file.
+FRONTEND_BUILD_DIR = FRONTEND_DIR / 'build'
 STATICFILES_DIRS = [
-    # main.js produced by `npm run build` in /frontend
-    FRONTEND_DIR / 'build',
+    FRONTEND_BUILD_DIR,
 ]
 
 # MelodyT5 model used to generate etudes (lives in /ml, not in the backend)

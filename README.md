@@ -39,21 +39,50 @@ through the paths in `backend/musictrainer/settings.py` (`MELODYT5_DIR`,
 
 ## Running locally
 
-Build the frontend (Django serves the bundle as a static file):
+First-time setup:
 
 ```bash
-cd frontend && npm install && npm run build
+cd backend && pip install -r requirements.txt && python manage.py migrate
 ```
-
-Use `npm run dev` instead to rebuild on every change.
-
-Start the backend:
 
 ```bash
-cd backend && pip install -r requirements.txt && python manage.py migrate && python manage.py runserver
+cd frontend && npm install
 ```
 
-Then open http://localhost:8000/home.
+### While developing
+
+Run both servers, each in its own terminal:
+
+```bash
+cd backend && python manage.py runserver
+```
+
+```bash
+cd frontend && npm start
+```
+
+Open **http://localhost:3000**. Frontend changes show up instantly. The dev
+server forwards `/api`, `/login`, `/signup`, `/admin` and `/static` to
+Django on port 8000, so logging in works the same as in production.
+
+### Like production (Django only)
+
+```bash
+cd frontend && npm run build
+```
+
+```bash
+cd backend && python manage.py runserver
+```
+
+Open **http://localhost:8000**. Django serves `frontend/build/index.html` for
+every page React handles, and the bundle (`main.<hash>.js`) as a static file.
+
+### Adding a page
+
+Add a `<Route>` in `frontend/src/App.js`. Django needs no change: any URL
+that isn't `/api/`, `/admin/`, `/static/`, `/login` or `/signup` is sent to
+React.
 
 Etude generation runs `ml/melodyt5/inference.py`; set up its environment as
 described in `ml/melodyt5/README.md`. If the model uses a different Python
