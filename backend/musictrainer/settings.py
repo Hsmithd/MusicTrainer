@@ -42,7 +42,7 @@ INSTALLED_APPS = [
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
-    'App.apps.AppConfig',
+    'trainer.apps.TrainerConfig',
 ]
 
 MIDDLEWARE = [
@@ -60,9 +60,7 @@ ROOT_URLCONF = 'musictrainer.urls'
 TEMPLATES = [
     {
         'BACKEND': 'django.template.backends.django.DjangoTemplates',
-        'DIRS': [
-            BASE_DIR / 'App' / 'templates'
-        ],
+        'DIRS': [],
         'APP_DIRS': True,
         'OPTIONS': {
             'context_processors': [

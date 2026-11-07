@@ -1,6 +1,6 @@
 from django.contrib.auth import authenticate, login
 
-from App.forms import CustomUserCreationForm
+from trainer.forms import CustomUserCreationForm
 
 
 class AuthService:

@@ -5,28 +5,36 @@ AI generated practice tools
 
 ```
 MusicTrainer/
-├── frontend/          React single-page app (webpack → frontend/build/main.js)
+├── frontend/              React app (what the user sees)
 │   └── src/
-│       └── components/
-├── backend/           Django project
+│       ├── pages/         one component per route: Home, Profile
+│       ├── components/    reusable UI: ScoreViewer
+│       └── api/           functions that call the backend
+├── backend/               Django server
 │   ├── manage.py
-│   ├── musictrainer/  project settings, root urls, wsgi/asgi
-│   └── App/
-│       ├── views.py        HTTP layer: requests in, responses out
-│       ├── services/       business logic (auth, etude generation)
-│       ├── repositories/   data access (database tables, generated files)
-│       ├── templates/      Django templates (login, signup, SPA shell)
-│       └── static/
-└── ml/                Machine-learning code, independent of the web app
-    ├── melodyt5/      MelodyT5 model: training + inference
-    ├── data_tagging/  difficulty tagging for training data
+│   ├── musictrainer/      project settings, root urls, wsgi/asgi
+│   └── trainer/           the app itself
+│       ├── views.py           HTTP layer: requests in, responses out
+│       ├── services/          business logic (auth, etude generation)
+│       ├── repositories/      data access (database tables, generated files)
+│       ├── templates/trainer/ login, signup, and the page that loads React
+│       ├── static/trainer/    CSS for the login/signup pages
+│       └── tests/             one test file per layer
+└── ml/                    machine-learning code, independent of the web app
+    ├── melodyt5/          MelodyT5 model: training and inference
+    ├── data_tagging/      difficulty tagging for training data
     └── notebooks/
 ```
 
-Dependencies only point one way inside the backend:
-`views → services → repositories → database / files`.
-The backend reaches the model only through `EtudeService`, using the paths
-configured in `backend/musictrainer/settings.py` (`MELODYT5_DIR`,
+How a request flows:
+
+```
+frontend/src/api  →  trainer/views.py  →  trainer/services  →  trainer/repositories  →  database / files
+                                                     └──────→  ml/melodyt5 (runs the model)
+```
+
+Each layer only calls the one to its right. The backend finds the model
+through the paths in `backend/musictrainer/settings.py` (`MELODYT5_DIR`,
 `MELODYT5_PYTHON`).
 
 ## Running locally

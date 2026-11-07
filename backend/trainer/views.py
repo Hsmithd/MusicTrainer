@@ -1,7 +1,7 @@
 """HTTP layer: parse requests, call services, return responses.
 
-Keep logic out of here — put business rules in ``App/services`` and data
-access in ``App/repositories``.
+Keep logic out of here — put business rules in ``trainer/services`` and data
+access in ``trainer/repositories``.
 """
 from django.contrib import messages
 from django.http import JsonResponse
@@ -9,13 +9,13 @@ from django.shortcuts import redirect, render
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_http_methods
 
-from App.forms import CustomUserCreationForm
-from App.services import AuthService, EtudeGenerationError, EtudeService
+from trainer.forms import CustomUserCreationForm
+from trainer.services import AuthService, EtudeGenerationError, EtudeService
 
 
 def index(request):
     """Serve the React single-page app (built from /frontend)."""
-    return render(request, "App/index.html")
+    return render(request, "trainer/index.html")
 
 
 def login_view(request):
@@ -28,7 +28,7 @@ def login_view(request):
         if user is not None:
             return redirect(index)
         messages.error(request, "Invalid username or password")
-    return render(request, "App/Login.html")
+    return render(request, "trainer/login.html")
 
 
 def signup_view(request):
@@ -38,7 +38,7 @@ def signup_view(request):
             return redirect(index)
     else:
         form = CustomUserCreationForm()
-    return render(request, "App/Sign_Up.html", {"form": form})
+    return render(request, "trainer/signup.html", {"form": form})
 
 
 @csrf_exempt

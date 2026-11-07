@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import ABCJS from 'abcjs';
 import { Settings } from 'lucide-react';
-import './MidiScoreViewer.css';
+import './ScoreViewer.css';
 
 const TIME_SIGNATURES = [
     { numerator: 4, denominator: 4, display: "4/4" },

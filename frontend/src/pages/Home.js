@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
 import './Home.css';
-import ScoreViewer from './MidiScoreViewer';
+import ScoreViewer from '../components/ScoreViewer';
+import { generateEtude } from '../api/etudes';
 import { Wand2 } from 'lucide-react';
 
 function Home() {
@@ -27,13 +28,7 @@ function Home() {
     const handleGenerate = async () => {
         setIsGenerating(true);
         try {
-            const response = await fetch('/api/generate-etude/', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ difficulty, complexity, speed }),
-            });
-
-            const data = await response.json();
+            const data = await generateEtude({ difficulty, complexity, speed });
 
             if (data.success && data.abc_notation) {
                 const tunes = data.abc_notation.split('\n\n');

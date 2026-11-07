@@ -1,9 +1,8 @@
 import React from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
-import Home from './components/Home';
-import Profile from './components/Profile';
+import Home from './pages/Home';
+import Profile from './pages/Profile';
 import './App.css';
-import logo from './logo.svg';
 
 function App() {
   return (

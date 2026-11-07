@@ -2,7 +2,7 @@ import subprocess
 
 from django.conf import settings
 
-from App.repositories import EtudeRepository
+from trainer.repositories import EtudeRepository
 
 
 class EtudeGenerationError(Exception):
