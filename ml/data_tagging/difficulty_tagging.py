@@ -260,6 +260,36 @@ def tag_file(input_path, output_path, scale):
     return counts
 
 
+def print_stats(path, per_task=2000):
+    """Average difficulty features per task, to spot measurements skewed by something else."""
+    totals, counts, seen = defaultdict(Counter), defaultdict(Counter), Counter()
+    examples, lengths = {}, defaultdict(list)
+    for record in read_records(path):
+        task = record_task(record)
+        if seen[task] >= per_task:
+            continue
+        features = melody_features(record, task)
+        if features is None:
+            continue
+        seen[task] += 1
+        for name, value in features.items():
+            if value is not None:
+                totals[task][name] += value
+                counts[task][name] += 1
+        output = record.get("output") or ""
+        lengths[task].append(len(NOTE_RE.findall(music_body(output))))
+        examples.setdefault(task, output)
+    names = list(WEIGHTS)
+    print(f"\nAverages over the first {per_task} melodies of each task in {path}")
+    print("  " + f"{'task':<15}{'notes':>7}" + "".join(f"{n[:9]:>10}" for n in names))
+    for task in sorted(seen, key=str):
+        print("  " + f"{str(task):<15}{statistics.mean(lengths[task]):>7.0f}"
+              + "".join(f"{totals[task][n] / counts[task][n]:>10.2f}" if counts[task][n] else f"{'-':>10}"
+                       for n in names))
+    for task in sorted(examples, key=str):
+        print(f"\n--- example {task} output (first 300 characters) ---\n{examples[task][:300]}")
+
+
 def print_summary(path, counts):
     print(f"\n{path}")
     print(f"  {'task':<15}{'easy':>9}{'medium':>9}{'hard':>9}{'untagged':>10}")
@@ -274,7 +304,13 @@ def main():
                         help="JSONL files; the first one is used for calibration")
     parser.add_argument("--sample-size", type=int, default=20000,
                         help="melodies sampled for calibration (default: 20000)")
+    parser.add_argument("--stats", action="store_true",
+                        help="print average features per task and an example, without tagging")
     args = parser.parse_args()
+
+    if args.stats:
+        print_stats(args.inputs[0])
+        return
 
     print(f"Calibrating on {args.inputs[0]} ...")
     scale = calibrate(args.inputs[0], args.sample_size)
