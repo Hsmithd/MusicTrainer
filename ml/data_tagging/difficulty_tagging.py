@@ -56,6 +56,7 @@ HEADER_LINE_RE = re.compile(r"^\s*(?:[A-Za-z]:|%)")
 INLINE_FIELD_RE = re.compile(r"\[[A-Za-z]:[^\]]*\]")
 QUOTED_RE = re.compile(r'"[^"]*"')
 DECORATION_RE = re.compile(r"![^!\n]*!|\+[^+\n]*\+")
+NON_ORNAMENTS = {"breath"}
 NOTE_RE = re.compile(r"(\^{1,2}|_{1,2}|=)?([A-Ga-g])([,']*)(\d*/*\d*)")
 BASE_SEMITONE = {"C": 0, "D": 2, "E": 4, "F": 5, "G": 7, "A": 9, "B": 11}
 
@@ -109,7 +110,9 @@ def note_pitch(accidental, letter, octave_marks):
 def difficulty_features(abc):
     """Numeric features of a melody, or None if it has no notes."""
     body = music_body(abc)
-    ornaments = len(DECORATION_RE.findall(body)) + body.count("~")
+    # !breath! marks phrase boundaries (segmentation outputs use it), not an ornament.
+    decorations = [d for d in DECORATION_RE.findall(body) if d.strip("!+").lower() not in NON_ORNAMENTS]
+    ornaments = len(decorations) + body.count("~")
     body = DECORATION_RE.sub(" ", body)
 
     notes = NOTE_RE.findall(body)
@@ -142,11 +145,7 @@ def melody_features(record, task):
     """Difficulty features of a record's output melody, or None if it isn't one."""
     if task not in MELODY_TASKS:
         return None
-    output = record.get("output") or ""
-    if task == "segmentation":
-        # '!' marks phrase boundaries in segmentation outputs; it isn't an ornament.
-        output = output.replace("!", "")
-    return difficulty_features(output)
+    return difficulty_features(record.get("output") or "")
 
 
 def record_task(record):

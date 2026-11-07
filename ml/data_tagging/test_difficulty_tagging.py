@@ -43,11 +43,16 @@ class FeatureTests(unittest.TestCase):
 
 
 class SegmentationTests(unittest.TestCase):
-    def test_phrase_marks_are_not_ornaments(self):
-        plain = {"task": "segmentation", "output": "X:1\nL:1/8\nK:G\nGABc dBGB | cBAG A4 | GABc dBGB | AGFA G4 |]\n"}
-        marked = {"task": "segmentation", "output": "X:1\nL:1/8\nK:G\nGABc dBGB | cBAG A4 !| GABc dBGB | AGFA G4 !|]\n"}
-        self.assertEqual(dt.melody_features(marked, "segmentation"), dt.melody_features(plain, "segmentation"))
-        self.assertEqual(dt.melody_features(marked, "segmentation")["ornaments"], 0)
+    # Real MelodyHub segmentation outputs mark phrases with !breath!.
+    PLAIN = 'X:1\nL:1/4\nM:3/4\nK:C\n"C" c |"C" c2"G/B" g |"C" e3/2 d/"Am" c |"G" d2"C" e |\n'
+    MARKED = 'X:1\nL:1/4\nM:3/4\nK:C\n"C" c |"C" c2"G/B" g |"C" e3/2 d/"Am" c |"G" !breath!d2"C" e |\n'
+
+    def test_breath_marks_change_nothing(self):
+        self.assertEqual(dt.difficulty_features(self.MARKED), dt.difficulty_features(self.PLAIN))
+        self.assertEqual(dt.difficulty_features(self.MARKED)["ornaments"], 0)
+
+    def test_real_ornaments_still_count(self):
+        self.assertGreater(dt.difficulty_features(self.PLAIN.replace("d2", "!trill!d2"))["ornaments"], 0)
 
 
 class TagFormatTests(unittest.TestCase):
