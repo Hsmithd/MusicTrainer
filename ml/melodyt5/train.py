@@ -134,14 +134,19 @@ def train_epoch():
     tqdm_train_set = tqdm(train_loader)
     total_train_loss, iter_idx = 0, 1
     model.train()
-    for batch in tqdm_train_set:
+    model.zero_grad(set_to_none=True)
+    for step, batch in enumerate(tqdm_train_set, start=1):
         loss = process_one_batch(batch)
         if loss is None or torch.isnan(loss).item():
             continue
-        loss.backward()
-        optimizer.step()
-        lr_scheduler.step()
-        model.zero_grad(set_to_none=True)
+        # Gradients from ACCUMULATION_STEPS batches are added up before each update,
+        # so the model learns from BATCH_SIZE * ACCUMULATION_STEPS examples per step
+        # while only BATCH_SIZE of them are in GPU memory at once.
+        (loss / ACCUMULATION_STEPS).backward()
+        if step % ACCUMULATION_STEPS == 0:
+            optimizer.step()
+            lr_scheduler.step()
+            model.zero_grad(set_to_none=True)
         total_train_loss += loss.item()
         tqdm_train_set.set_postfix({str(global_rank)+'_train_loss': total_train_loss/iter_idx})
         iter_idx += 1

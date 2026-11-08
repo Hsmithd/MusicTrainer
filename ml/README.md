@@ -65,9 +65,14 @@ On one GPU each epoch uses `TRAIN_SAMPLES_PER_EPOCH` random examples (100,000
 by default, different each epoch); set it to `None` to use all ~1.4 million.
 Watch the time estimate on the progress bar and adjust it or `NUM_EPOCHS`.
 
-If the GPU runs out of memory, lower `PATCH_SAMPLING_BATCH_SIZE` (bars per
-batch the note-level decoder trains on; 512 by default) or `BATCH_SIZE` in
-`config.py`.
+GPU memory is set by `config.py`:
+
+- `PATCH_SAMPLING_BATCH_SIZE` (128): bars per batch the note-level decoder
+  trains on. The biggest lever, roughly 20 MB per bar.
+- `BATCH_SIZE` (5) with `ACCUMULATION_STEPS` (2): tunes per batch on the GPU,
+  and how many batches are combined per update (10 tunes per update).
+
+If the GPU runs out of memory, lower `PATCH_SAMPLING_BATCH_SIZE` first.
 
 `weights_difficulty.pth` is about 2 GB because it also stores the optimizer
 state. If training stops partway, set `LOAD_FROM_CHECKPOINT = True` to resume.
