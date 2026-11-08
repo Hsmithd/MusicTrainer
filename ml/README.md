@@ -77,6 +77,21 @@ If the GPU runs out of memory, lower `PATCH_SAMPLING_BATCH_SIZE` first.
 `weights_difficulty.pth` is about 2 GB because it also stores the optimizer
 state. If training stops partway, set `LOAD_FROM_CHECKPOINT = True` to resume.
 
+## Checking that it worked
+
+Training loss barely changes during fine-tuning (the model already knows
+MelodyHub; only the tag is new), so it can't tell you whether the model
+learned the tags. Generate and score tunes at each level instead, from
+`ml/melodyt5`:
+
+```bash
+python evaluate_difficulty.py -n 20
+```
+
+If it worked, the average score rises from easy to hard and most tunes land
+in the requested level. Validation loss stopped improving after about 2
+epochs in the first run, so `NUM_EPOCHS = 3` is enough for retraining.
+
 ## How the app uses it
 
 The difficulty slider sends `easy`/`medium`/`hard` to `/api/generate-etude/`,
