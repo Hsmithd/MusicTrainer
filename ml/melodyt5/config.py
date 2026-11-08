@@ -9,7 +9,7 @@ LEARNING_RATE = 1e-4           # Lower than pre-training (2e-4) so fine-tuning d
 ACCUMULATION_STEPS = 1          # Accumulation steps to simulate large batch size
 BATCH_SIZE = 10                # Batch size for training
 TRAIN_SAMPLES_PER_EPOCH = 100_000  # Random examples per epoch on one GPU (None = all ~1.4M); different each epoch
-PATCH_SAMPLING_BATCH_SIZE = 0   # Batch size for patch during training, 0 for full context
+PATCH_SAMPLING_BATCH_SIZE = 512  # Max bars per batch the char-level decoder trains on (random subset); caps GPU memory on batches of long tunes. 0 = all
 LOAD_FROM_CHECKPOINT = False     # Resume an interrupted fine-tuning run from WEIGHTS_PATH
 LOAD_FROM_PRETRAINED = True     # Start from the pretrained MelodyT5 weights (fine-tuning, not training from scratch)
 SHARE_WEIGHTS = False            # Whether to share weights between the encoder and decoder
