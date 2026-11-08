@@ -1,0 +1,46 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Login Form</title>
+<link rel="stylesheet" href="{% static 'trainer/auth.css' %}">
+</head>
+<body>
+  <div class="box">
+    <h2 style="text-align: center">Log In</h2>
+      {% if messages %}
+        <ul class="messages">
+            {% for message in messages %}
+                <div style="color: red">{{ message }}</div>
+            {% endfor %}
+        </ul>
+        {% endif %}
+
+    <form method="POST" action="{% url 'login' %}">
+        {% csrf_token %}
+      <label for="username">Username</label>
+      <input type="text" id="username" name="username" required />
+
+      <label for="password">Password</label>
+      <input type="password" id="password" name="password" required />
+
+      <button type="submit">Submit</button>
+
+      <div class="google-button">
+        <img src="https://developers.google.com/identity/images/g-logo.png" alt="Google logo">
+        <span>Sign in with Google</span>
+      </div>
+
+        <p class="signup-link" style="text-align: center;">Don't have an account? <a href="{% url 'signup' %}">Sign Up</a>
+
+
+    </form>
+  </div>
+</body>
+</html>
+
+
+
+
